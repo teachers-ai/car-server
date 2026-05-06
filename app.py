@@ -30,6 +30,7 @@ def _speed_payload():
 
 connections = {}          # {sid: {ip, connected_at, last_cmd}}
 active_controller = None  # sid of client with control, or None
+pending_request = None    # sid of client waiting for control approval
 _lock = threading.Lock()
 
 _camera_frame = None
@@ -120,7 +121,7 @@ def on_connect():
 
 @socketio.on('disconnect')
 def on_disconnect():
-    global active_controller
+    global active_controller, pending_request
     sid = request.sid
     with _lock:
         connections.pop(sid, None)
@@ -128,22 +129,64 @@ def on_disconnect():
             active_controller = None
             if robo:
                 robo.stop()
+        if pending_request == sid:
+            pending_request = None
         data = _snapshot()
     _broadcast(data)
 
 
 @socketio.on('take_control')
 def on_take_control():
-    global active_controller
+    global active_controller, pending_request
     sid = request.sid
     with _lock:
         if active_controller is None:
+            # No one has control — grant immediately
             active_controller = sid
             data = _snapshot()
-        else:
+            controller_sid = None
+        elif active_controller == sid:
             data = None
-    if data:
+            controller_sid = None
+        else:
+            # Someone has control — send approval request to the controller
+            pending_request = sid
+            requester_ip = connections[sid]['ip'] if sid in connections else sid
+            data = None
+            controller_sid = active_controller
+
+    if controller_sid:
+        socketio.emit('control_request', {'requester_sid': sid, 'requester_ip': requester_ip}, to=controller_sid)
+        socketio.emit('control_pending', {}, to=sid)
+    elif data:
         _broadcast(data)
+
+
+@socketio.on('approve_control')
+def on_approve():
+    global active_controller, pending_request
+    sid = request.sid
+    with _lock:
+        if sid != active_controller or pending_request is None:
+            return
+        requester = pending_request
+        active_controller = requester
+        pending_request = None
+        data = _snapshot()
+    socketio.emit('control_response', {'approved': True}, to=requester)
+    _broadcast(data)
+
+
+@socketio.on('deny_control')
+def on_deny():
+    global pending_request
+    sid = request.sid
+    with _lock:
+        if sid != active_controller or pending_request is None:
+            return
+        requester = pending_request
+        pending_request = None
+    socketio.emit('control_response', {'approved': False}, to=requester)
 
 
 @socketio.on('release_control')
