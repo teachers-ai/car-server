@@ -232,6 +232,37 @@ main {
 .btn-drop:disabled { background: #1a1a1a; color: #333; border-color: #222; cursor: default; }
 
 .empty-row td { color: #333; text-align: center; padding: 16px 0; font-size: 0.8rem; }
+
+/* ── Speed sliders ── */
+.speed-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid #252525;
+}
+.speed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+.speed-row label {
+    font-size: 0.75rem;
+    color: #888;
+    width: 80px;
+    flex-shrink: 0;
+}
+.speed-row input[type=range] {
+    flex: 1;
+    accent-color: #2563eb;
+    cursor: pointer;
+}
+.speed-val {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: #4ade80;
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+}
 </style>
 </head>
 <body>
@@ -286,6 +317,21 @@ main {
                     <div class="dpad-btn disabled" id="btn-B" data-dir="B">&#9660;</div>
                 </div>
                 <div class="dpad-cell"></div>
+            </div>
+        </div>
+
+        <!-- Speed -->
+        <div class="speed-section">
+            <p class="section-label">Speed</p>
+            <div class="speed-row">
+                <label>Move</label>
+                <input type="range" id="move-slider" min="0" max="1" step="0.05" value="0.3" oninput="onSpeedChange()">
+                <span class="speed-val" id="move-val">0.3</span>
+            </div>
+            <div class="speed-row">
+                <label>Turn</label>
+                <input type="range" id="turn-slider" min="0" max="1" step="0.05" value="0.4" oninput="onSpeedChange()">
+                <span class="speed-val" id="turn-val">0.4</span>
             </div>
         </div>
 
@@ -371,6 +417,23 @@ function updateBanner(ctrl, conns) {
 
 function takeControl()    { socket.emit('take_control'); }
 function releaseControl() { socket.emit('release_control'); }
+
+// ── Speed sliders ─────────────────────────────────────────────────────────────
+
+socket.on('speed_update', (data) => {
+    document.getElementById('move-slider').value = data.move_speed;
+    document.getElementById('turn-slider').value = data.turn_speed;
+    document.getElementById('move-val').textContent = data.move_speed.toFixed(2);
+    document.getElementById('turn-val').textContent = data.turn_speed.toFixed(2);
+});
+
+function onSpeedChange() {
+    const move = parseFloat(document.getElementById('move-slider').value);
+    const turn = parseFloat(document.getElementById('turn-slider').value);
+    document.getElementById('move-val').textContent = move.toFixed(2);
+    document.getElementById('turn-val').textContent = turn.toFixed(2);
+    socket.emit('set_speed', { move_speed: move, turn_speed: turn });
+}
 
 // ── Connections table ─────────────────────────────────────────────────────────
 

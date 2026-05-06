@@ -25,6 +25,9 @@ socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
 MOVE_SPEED = 0.3
 TURN_SPEED = 0.4
 
+def _speed_payload():
+    return {'move_speed': MOVE_SPEED, 'turn_speed': TURN_SPEED}
+
 connections = {}          # {sid: {ip, connected_at, last_cmd}}
 active_controller = None  # sid of client with control, or None
 _lock = threading.Lock()
@@ -112,6 +115,7 @@ def on_connect():
         }
         data = _snapshot()
     _broadcast(data)
+    socketio.emit('speed_update', _speed_payload(), to=sid)
 
 
 @socketio.on('disconnect')
@@ -158,7 +162,6 @@ def on_release_control():
         _broadcast(data)
 
 
-_CMD_SPEED = {'F': MOVE_SPEED, 'B': MOVE_SPEED, 'L': TURN_SPEED, 'R': TURN_SPEED}
 _CMD_METHOD = {'F': 'forward', 'B': 'backward', 'L': 'left', 'R': 'right', 'S': 'stop'}
 
 
@@ -175,12 +178,26 @@ def on_command(data):
             method = getattr(robo, _CMD_METHOD[direction])
             if direction == 'S':
                 method()
+            elif direction in ('F', 'B'):
+                method(MOVE_SPEED)
             else:
-                method(_CMD_SPEED[direction])
+                method(TURN_SPEED)
         if sid in connections:
             connections[sid]['last_cmd'] = direction
         snap = _snapshot()
     _broadcast(snap)
+
+
+@socketio.on('set_speed')
+def on_set_speed(data):
+    global MOVE_SPEED, TURN_SPEED
+    move = data.get('move_speed')
+    turn = data.get('turn_speed')
+    if move is not None:
+        MOVE_SPEED = round(max(0.0, min(1.0, float(move))), 2)
+    if turn is not None:
+        TURN_SPEED = round(max(0.0, min(1.0, float(turn))), 2)
+    socketio.emit('speed_update', _speed_payload())
 
 
 @socketio.on('drop_client')
