@@ -20,7 +20,8 @@ except Exception:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'raspcar_secret'
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*',
+                    transports=['websocket', 'polling'])
 
 MOVE_SPEED = 0.3
 TURN_SPEED = 0.4
@@ -139,25 +140,28 @@ def on_disconnect():
 def on_take_control():
     global active_controller, pending_request
     sid = request.sid
+    print(f'[take_control] from {sid}, active_controller={active_controller}')
     with _lock:
         if active_controller is None:
-            # No one has control — grant immediately
             active_controller = sid
             data = _snapshot()
             controller_sid = None
+            print(f'[take_control] granted immediately to {sid}')
         elif active_controller == sid:
             data = None
             controller_sid = None
+            print(f'[take_control] {sid} already has control')
         else:
-            # Someone has control — send approval request to the controller
             pending_request = sid
             requester_ip = connections[sid]['ip'] if sid in connections else sid
             data = None
             controller_sid = active_controller
+            print(f'[take_control] request pending — asking controller {controller_sid}')
 
     if controller_sid:
         socketio.emit('control_request', {'requester_sid': sid, 'requester_ip': requester_ip}, to=controller_sid)
         socketio.emit('control_pending', {}, to=sid)
+        print(f'[take_control] control_request sent to {controller_sid}, control_pending sent to {sid}')
     elif data:
         _broadcast(data)
 
@@ -166,8 +170,10 @@ def on_take_control():
 def on_approve():
     global active_controller, pending_request
     sid = request.sid
+    print(f'[approve_control] from {sid}')
     with _lock:
         if sid != active_controller or pending_request is None:
+            print(f'[approve_control] ignored — not controller or no pending request')
             return
         requester = pending_request
         active_controller = requester
@@ -175,18 +181,22 @@ def on_approve():
         data = _snapshot()
     socketio.emit('control_response', {'approved': True}, to=requester)
     _broadcast(data)
+    print(f'[approve_control] control transferred to {requester}')
 
 
 @socketio.on('deny_control')
 def on_deny():
     global pending_request
     sid = request.sid
+    print(f'[deny_control] from {sid}')
     with _lock:
         if sid != active_controller or pending_request is None:
+            print(f'[deny_control] ignored — not controller or no pending request')
             return
         requester = pending_request
         pending_request = None
     socketio.emit('control_response', {'approved': False}, to=requester)
+    print(f'[deny_control] request from {requester} denied')
 
 
 @socketio.on('release_control')
@@ -247,7 +257,7 @@ def on_set_speed(data):
 def on_drop(data):
     target = data.get('sid', '')
     if target and target in connections:
-        socketio.disconnect(target, namespace='/')
+        socketio.server.disconnect(target, namespace='/')
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
