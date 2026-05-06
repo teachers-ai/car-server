@@ -12,6 +12,7 @@ A Flask-based server that runs on a Raspberry Pi car. It streams a live camera f
 - Multi-connection dashboard — see all connected clients in real time
 - Drop any connection from the UI
 - Adjustable move and turn speed via sliders (synced across all clients in real time)
+- Control request approval — requester waits for the current controller to approve or deny
 
 ---
 
@@ -128,13 +129,18 @@ Connect via Socket.IO to `http://<pi-ip>:5000`.
 | `command` | `{"dir": "F\|B\|L\|R\|S"}` | Drive command (only works if you hold control) |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client |
 | `set_speed` | `{"move_speed": 0.0–1.0, "turn_speed": 0.0–1.0}` | Update move and/or turn speed; broadcast to all clients |
+| `approve_control` | — | Approve a pending control request (only valid if you hold control) |
+| `deny_control` | — | Deny a pending control request (only valid if you hold control) |
 
 **Receive:**
 
-| Event | Payload | Description |
-|---|---|---|
-| `connection_list` | `{active_controller, connections[]}` | Broadcast to all clients on any state change |
-| `speed_update` | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent to all clients when speed changes; also sent to new clients on connect |
+| Event | Who receives it | Payload | Description |
+|---|---|---|---|
+| `connection_list` | All clients | `{active_controller, connections[]}` | Broadcast on any state change |
+| `speed_update` | All clients | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent when speed changes; also on connect |
+| `control_request` | Current controller | `{"requester_sid": "...", "requester_ip": "..."}` | Someone is requesting control — show approve/deny prompt |
+| `control_pending` | Requester | — | Your request is waiting for the controller to respond |
+| `control_response` | Requester | `{"approved": true\|false}` | Outcome of your control request |
 
 ---
 
