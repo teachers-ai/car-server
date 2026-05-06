@@ -21,8 +21,13 @@ Both machines must be on the **same network**.
 ## Install Dependencies (client machine)
 
 ```bash
-pip install flask python-socketio requests
+pip install python-socketio requests flask
 ```
+
+> **Important:** Always connect with `transports=['polling']` — the server runs on Werkzeug which does not support WebSocket upgrades.
+> ```python
+> sio.connect(SERVER, transports=['polling'])
+> ```
 
 ---
 
@@ -34,7 +39,7 @@ All car control goes over a Socket.IO WebSocket connection.
 
 | Event | Payload | Description |
 |---|---|---|
-| `take_control` | _(none)_ | Request exclusive control of the car. Only works if no one else holds control. |
+| `take_control` | _(none)_ | Take exclusive control — force-takes from whoever currently holds it. |
 | `release_control` | _(none)_ | Give up control. Car stops automatically. |
 | `command` | `{"dir": "<direction>"}` | Send a drive command. Only executes if you hold control. |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client by their session ID. |
@@ -76,9 +81,22 @@ All car control goes over a Socket.IO WebSocket connection.
 
 ---
 
+## Keyboard Client (ready to use)
+
+`client.py` in this repo is a ready-to-run keyboard client:
+
+```bash
+pip install python-socketio
+python client.py
+```
+
+Controls: `↑ ↓ ← →` to drive, `S` to stop, `T` to take control, `Q` to quit.
+
+---
+
 ## Minimal Python Client
 
-A bare-minimum script to take control and drive the car:
+The smallest working snippet — paste this into another Claude session to build on:
 
 ```python
 import socketio
@@ -90,24 +108,26 @@ sio = socketio.Client()
 
 @sio.on('connect')
 def on_connect():
-    print('Connected, taking control...')
+    print('Connected:', sio.sid)
     sio.emit('take_control')
 
 @sio.on('connection_list')
 def on_list(data):
-    ctrl = data['active_controller']
-    print(f'Controller: {ctrl}')
-    print(f'Total clients: {len(data["connections"])}')
+    am_controller = data['active_controller'] == sio.sid
+    print(f"Controller: {'ME' if am_controller else data['active_controller']} | Clients: {len(data['connections'])}")
 
-sio.connect(SERVER)
+@sio.on('speed_update')
+def on_speed(data):
+    print(f"Speed — move: {data['move_speed']}  turn: {data['turn_speed']}")
 
+sio.connect(SERVER, transports=['polling'])
 time.sleep(1)
-sio.emit('set_speed', {'move_speed': 0.5, 'turn_speed': 0.6})  # adjust speeds
-sio.emit('command', {'dir': 'F'})   # go forward
+
+sio.emit('set_speed', {'move_speed': 0.5, 'turn_speed': 0.6})
+sio.emit('command', {'dir': 'F'})   # forward
 time.sleep(2)
 sio.emit('command', {'dir': 'S'})   # stop
 sio.emit('release_control')
-
 sio.disconnect()
 ```
 
@@ -145,7 +165,7 @@ def on_list(data):
     global connection_data
     connection_data = data
 
-sio.connect(SERVER)
+sio.connect(SERVER, transports=['polling'])
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
@@ -225,11 +245,11 @@ python client_app.py
 
 ## Control Flow
 
-### Taking control (only granted when no one holds it)
+### Taking control (force takeover — always granted)
 ```
 Client B                    Server
     |--- take_control --------> |
-    |<-- connection_list -------| (you are now controller)
+    |<-- connection_list -------| (you are now controller, previous holder loses it)
 ```
 
 ### Driving
@@ -246,7 +266,7 @@ Client B (controller)       Server
 
 ## Notes
 
-- Only **one client** can hold control at a time. If another client already has control, `take_control` is silently ignored — check `active_controller` in `connection_list` to confirm.
+- `take_control` is a **force takeover** — it always succeeds, kicking whoever currently holds control. The car stops momentarily on transfer.
 - The car **stops automatically** if the controlling client disconnects.
 - The camera stream at `/video_feed` supports **multiple simultaneous viewers** — no need to take control to watch the feed.
 - `S` (stop) can be sent any time without holding control (the server will ignore it if you're not the controller, but it's safe to call).

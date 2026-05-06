@@ -38,8 +38,10 @@ A Flask-based server that runs on a Raspberry Pi car. It streams a live camera f
 car_server/
 ├── app.py               # Main Flask + Socket.IO server
 ├── Robo.py              # Motor control via GPIO
+├── client.py            # Standalone keyboard client (run on another machine)
 ├── templates/
 │   └── index.html       # Web dashboard UI
+├── start.sh             # Launch script
 ├── CLIENT_README.md     # Guide for building a client app
 └── requirements.txt     # Python dependencies
 ```
@@ -117,17 +119,18 @@ Returns a `multipart/x-mixed-replace` MJPEG stream. Can be embedded directly in 
 
 ### WebSocket events
 
-Connect via Socket.IO to `http://<pi-ip>:5000`.
+Connect via Socket.IO to `http://<pi-ip>:5000` using `transports=['polling']`.
 
 **Send:**
 
 | Event | Payload | Description |
 |---|---|---|
-| `take_control` | — | Claim exclusive control of the car |
+| `take_control` | — | Take exclusive control — force-takes from whoever holds it |
 | `release_control` | — | Release control; car stops |
 | `command` | `{"dir": "F\|B\|L\|R\|S"}` | Drive command (only works if you hold control) |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client |
 | `set_speed` | `{"move_speed": 0.0–1.0, "turn_speed": 0.0–1.0}` | Update move and/or turn speed; broadcast to all clients |
+
 **Receive:**
 
 | Event | Payload | Description |
@@ -136,6 +139,22 @@ Connect via Socket.IO to `http://<pi-ip>:5000`.
 | `speed_update` | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent to all clients when speed changes; also sent to new clients on connect |
 
 ---
+
+## Keyboard Client
+
+`client.py` is a standalone Python script to run on any machine on the same network:
+
+```bash
+pip install python-socketio
+python client.py
+```
+
+| Key | Action |
+|---|---|
+| `↑ ↓ ← →` | Drive |
+| `S` | Stop |
+| `T` | Take control |
+| `Q` | Quit |
 
 ## Building a Client App
 
