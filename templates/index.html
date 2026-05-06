@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RasCar FPV</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: #0f0f0f;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+header {
+    background: #161616;
+    border-bottom: 1px solid #2a2a2a;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.03em; }
+
+.badge {
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.badge-idle  { background: #252525; color: #666; }
+.badge-yours { background: #14532d; color: #4ade80; }
+.badge-other { background: #451a03; color: #fb923c; }
+
+main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    overflow: hidden;
+}
+
+/* ── Camera ── */
+.cam-pane {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+.cam-pane img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.cam-offline {
+    position: absolute;
+    color: #444;
+    font-size: 0.85rem;
+    display: none;
+}
+
+/* ── Right panel ── */
+.right-pane {
+    background: #161616;
+    border-left: 1px solid #252525;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* ── Control banner ── */
+.ctrl-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid #252525;
+}
+.section-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #444;
+    margin-bottom: 8px;
+}
+.ctrl-status {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    min-height: 1.3em;
+}
+.status-free  { color: #555; }
+.status-yours { color: #4ade80; }
+.status-other { color: #fb923c; }
+
+.btn {
+    display: inline-block;
+    padding: 7px 18px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    transition: background 0.15s;
+}
+.btn-take    { background: #1d4ed8; color: #fff; }
+.btn-take:hover { background: #1e40af; }
+.btn-release { background: #2a2a2a; color: #aaa; }
+.btn-release:hover { background: #3a3a3a; }
+
+/* ── D-pad ── */
+.dpad-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid #252525;
+}
+.dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 76px);
+    grid-template-rows: repeat(3, 76px);
+    gap: 6px;
+    margin-top: 8px;
+}
+.dpad-cell { display: flex; align-items: center; justify-content: center; }
+
+.dpad-btn {
+    width: 76px;
+    height: 76px;
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 10px;
+    color: #d0d0d0;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: background 0.08s, transform 0.08s, border-color 0.08s;
+    -webkit-tap-highlight-color: transparent;
+}
+.dpad-btn:not(.disabled):active,
+.dpad-btn.pressed {
+    background: #1d4ed8;
+    border-color: #3b82f6;
+    transform: scale(0.93);
+    color: #fff;
+}
+.dpad-btn.stop-btn { color: #f87171; border-color: #450a0a; }
+.dpad-btn.stop-btn:not(.disabled):active,
+.dpad-btn.stop-btn.pressed {
+    background: #7f1d1d;
+    border-color: #f87171;
+}
+.dpad-btn.disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* ── Connections table ── */
+.conn-section {
+    padding: 14px 16px;
+    flex: 1;
+}
+.conn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.77rem;
+    margin-top: 8px;
+}
+.conn-table th {
+    color: #444;
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 1px solid #252525;
+    font-weight: 500;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.conn-table td {
+    padding: 7px 6px;
+    border-bottom: 1px solid #1c1c1c;
+    vertical-align: middle;
+}
+.conn-table tr.self-row td { background: #101c2c; }
+
+.ip-cell   { font-family: monospace; color: #7dd3fc; font-size: 0.75rem; }
+.time-cell { color: #555; font-size: 0.73rem; }
+.cmd-cell  { font-family: monospace; font-weight: 700; font-size: 0.8rem; }
+.cmd-F { color: #4ade80; }
+.cmd-B { color: #f87171; }
+.cmd-L, .cmd-R { color: #fbbf24; }
+.cmd-S { color: #444; }
+
+.ctrl-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: #4ade80;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.self-tag {
+    color: #444;
+    font-size: 0.65rem;
+    margin-left: 4px;
+}
+
+.btn-drop {
+    background: #3a0a0a;
+    color: #f87171;
+    border: 1px solid #7f1d1d;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.btn-drop:hover:not(:disabled) { background: #7f1d1d; }
+.btn-drop:disabled { background: #1a1a1a; color: #333; border-color: #222; cursor: default; }
+
+.empty-row td { color: #333; text-align: center; padding: 16px 0; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>RasCar FPV</h1>
+    <span class="badge badge-idle" id="ctrl-badge">No Controller</span>
+</header>
+
+<main>
+    <!-- Camera feed -->
+    <div class="cam-pane">
+        <img src="/video_feed" alt="Camera Feed" id="cam-img"
+             onerror="this.style.display='none'; document.getElementById('cam-offline').style.display='block'">
+        <p class="cam-offline" id="cam-offline">Camera offline</p>
+    </div>
+
+    <!-- Right panel -->
+    <div class="right-pane">
+
+        <!-- Control ownership -->
+        <div class="ctrl-section">
+            <p class="section-label">Control</p>
+            <div class="ctrl-status status-free" id="ctrl-status">No one has control</div>
+            <button class="btn btn-take"    id="btn-take"    onclick="takeControl()">Take Control</button>
+            <button class="btn btn-release" id="btn-release" onclick="releaseControl()" style="display:none">Release Control</button>
+        </div>
+
+        <!-- D-pad -->
+        <div class="dpad-section">
+            <p class="section-label">Drive &nbsp;<span style="color:#333;font-size:0.63rem;letter-spacing:0">(arrow keys when focused)</span></p>
+            <div class="dpad">
+                <!-- row 1 -->
+                <div class="dpad-cell"></div>
+                <div class="dpad-cell">
+                    <div class="dpad-btn disabled" id="btn-F" data-dir="F">&#9650;</div>
+                </div>
+                <div class="dpad-cell"></div>
+                <!-- row 2 -->
+                <div class="dpad-cell">
+                    <div class="dpad-btn disabled" id="btn-L" data-dir="L">&#9664;</div>
+                </div>
+                <div class="dpad-cell">
+                    <div class="dpad-btn stop-btn disabled" id="btn-S" data-dir="S">&#9632;</div>
+                </div>
+                <div class="dpad-cell">
+                    <div class="dpad-btn disabled" id="btn-R" data-dir="R">&#9654;</div>
+                </div>
+                <!-- row 3 -->
+                <div class="dpad-cell"></div>
+                <div class="dpad-cell">
+                    <div class="dpad-btn disabled" id="btn-B" data-dir="B">&#9660;</div>
+                </div>
+                <div class="dpad-cell"></div>
+            </div>
+        </div>
+
+        <!-- Connections -->
+        <div class="conn-section">
+            <p class="section-label">Connections &nbsp;<span id="conn-count" style="color:#555">0</span></p>
+            <table class="conn-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>IP</th>
+                        <th>Since</th>
+                        <th>Cmd</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="conn-body">
+                    <tr class="empty-row"><td colspan="5">No connections yet</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div><!-- .right-pane -->
+</main>
+
+<script>
+const socket = io({ transports: ['websocket', 'polling'] });
+
+let mySid = null;
+let iHaveControl = false;
+let heldDir = null;
+
+socket.on('connect', () => { mySid = socket.id; });
+
+socket.on('disconnect', () => {
+    mySid = null;
+    iHaveControl = false;
+    setDpadEnabled(false);
+});
+
+socket.on('connection_list', (data) => {
+    const ctrl = data.active_controller;
+    iHaveControl = (ctrl === mySid);
+    setDpadEnabled(iHaveControl);
+    updateBanner(ctrl, data.connections);
+    renderTable(data.connections, ctrl);
+    document.getElementById('conn-count').textContent = data.connections.length;
+});
+
+// ── Control banner ────────────────────────────────────────────────────────────
+
+function updateBanner(ctrl, conns) {
+    const badge   = document.getElementById('ctrl-badge');
+    const status  = document.getElementById('ctrl-status');
+    const btnTake = document.getElementById('btn-take');
+    const btnRel  = document.getElementById('btn-release');
+
+    if (!ctrl) {
+        badge.className = 'badge badge-idle';
+        badge.textContent = 'No Controller';
+        status.className = 'ctrl-status status-free';
+        status.textContent = 'No one has control';
+        btnTake.style.display = '';
+        btnRel.style.display = 'none';
+    } else if (ctrl === mySid) {
+        badge.className = 'badge badge-yours';
+        badge.textContent = "You're Driving";
+        status.className = 'ctrl-status status-yours';
+        status.textContent = '✓ You have control';
+        btnTake.style.display = 'none';
+        btnRel.style.display = '';
+    } else {
+        const c = conns.find(x => x.sid === ctrl);
+        const ip = c ? c.ip : '?';
+        badge.className = 'badge badge-other';
+        badge.textContent = 'Controlled';
+        status.className = 'ctrl-status status-other';
+        status.textContent = `⚡ ${ip} is driving`;
+        btnTake.style.display = 'none';
+        btnRel.style.display = 'none';
+    }
+}
+
+function takeControl()    { socket.emit('take_control'); }
+function releaseControl() { socket.emit('release_control'); }
+
+// ── Connections table ─────────────────────────────────────────────────────────
+
+function renderTable(conns, ctrl) {
+    const tbody = document.getElementById('conn-body');
+    if (!conns.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No connections</td></tr>';
+        return;
+    }
+    tbody.innerHTML = conns.map((c, i) => {
+        const isSelf  = c.sid === mySid;
+        const isCtrl  = c.sid === ctrl;
+        const dot     = isCtrl  ? '<span class="ctrl-dot"></span>' : '';
+        const selfTag = isSelf  ? '<span class="self-tag">(you)</span>' : '';
+        const cmd     = c.last_cmd || '—';
+        const cmdCls  = 'FBLRS'.includes(cmd) ? `cmd-${cmd}` : '';
+        return `<tr class="${isSelf ? 'self-row' : ''}">
+            <td>${i + 1}</td>
+            <td class="ip-cell">${dot}${c.ip}${selfTag}</td>
+            <td class="time-cell">${c.connected_at}</td>
+            <td class="cmd-cell ${cmdCls}">${cmd}</td>
+            <td><button class="btn-drop" ${isSelf ? 'disabled' : ''}
+                onclick="dropClient('${c.sid}')">Drop</button></td>
+        </tr>`;
+    }).join('');
+}
+
+function dropClient(sid) { socket.emit('drop_client', { sid }); }
+
+// ── D-pad ─────────────────────────────────────────────────────────────────────
+
+function setDpadEnabled(enabled) {
+    document.querySelectorAll('.dpad-btn').forEach(btn => {
+        btn.classList.toggle('disabled', !enabled);
+    });
+}
+
+function sendCmd(dir) {
+    if (!iHaveControl) return;
+    socket.emit('command', { dir });
+    if (dir !== 'S') {
+        heldDir = dir;
+        document.getElementById('btn-' + dir)?.classList.add('pressed');
+    }
+}
+
+function sendStop() {
+    if (!iHaveControl || !heldDir) return;
+    document.getElementById('btn-' + heldDir)?.classList.remove('pressed');
+    heldDir = null;
+    socket.emit('command', { dir: 'S' });
+}
+
+// Mouse / touch events on d-pad buttons
+document.querySelectorAll('.dpad-btn').forEach(btn => {
+    const dir = btn.dataset.dir;
+
+    btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        sendCmd(dir);
+    });
+    btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        sendCmd(dir);
+    }, { passive: false });
+});
+
+// Release anywhere
+document.addEventListener('mouseup',  () => sendStop());
+document.addEventListener('touchend', () => sendStop());
+
+// Keyboard
+const KEY_DIR = {
+    ArrowUp: 'F', ArrowDown: 'B', ArrowLeft: 'L', ArrowRight: 'R'
+};
+const keysHeld = new Set();
+
+document.addEventListener('keydown', e => {
+    if (!iHaveControl) return;
+    const dir = KEY_DIR[e.key];
+    if (dir && !keysHeld.has(e.key)) {
+        keysHeld.add(e.key);
+        sendCmd(dir);
+        e.preventDefault();
+    }
+    if (e.key === 's' || e.key === 'S') sendCmd('S');
+});
+
+document.addEventListener('keyup', e => {
+    const dir = KEY_DIR[e.key];
+    if (dir) {
+        keysHeld.delete(e.key);
+        if (heldDir === dir) sendStop();
+    }
+});
+</script>
+</body>
+</html>

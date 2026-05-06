@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+images/
+images_archive/
+predictlogs/
+models/
+*.h5
+*.pt
+*.pth
+.env
