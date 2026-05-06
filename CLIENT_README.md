@@ -38,6 +38,7 @@ All car control goes over a Socket.IO WebSocket connection.
 | `release_control` | _(none)_ | Give up control. Car stops automatically. |
 | `command` | `{"dir": "<direction>"}` | Send a drive command. Only executes if you hold control. |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client by their session ID. |
+| `set_speed` | `{"move_speed": 0.0–1.0, "turn_speed": 0.0–1.0}` | Update move and/or turn speed. Broadcast to all clients immediately. |
 
 ### Direction values for `command`
 
@@ -54,6 +55,7 @@ All car control goes over a Socket.IO WebSocket connection.
 | Event | Payload | Description |
 |---|---|---|
 | `connection_list` | See below | Sent to all clients whenever someone connects, disconnects, or sends a command. |
+| `speed_update` | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent to all clients when speed changes; also sent to your client on connect. |
 
 #### `connection_list` payload structure
 
@@ -100,6 +102,7 @@ def on_list(data):
 sio.connect(SERVER)
 
 time.sleep(1)
+sio.emit('set_speed', {'move_speed': 0.5, 'turn_speed': 0.6})  # adjust speeds
 sio.emit('command', {'dir': 'F'})   # go forward
 time.sleep(2)
 sio.emit('command', {'dir': 'S'})   # stop
@@ -181,6 +184,17 @@ def drop(sid):
     sio.emit('drop_client', {'sid': sid})
     return jsonify({'status': 'dropped', 'sid': sid})
 
+@app.route('/speed', methods=['POST'])
+def set_speed():
+    """
+    Update move and/or turn speed.
+    Body: {"move_speed": 0.5, "turn_speed": 0.6}
+    Values are clamped to 0.0 – 1.0 on the server.
+    """
+    data = request.get_json()
+    sio.emit('set_speed', data)
+    return jsonify({'status': 'sent', **data})
+
 @app.route('/connections')
 def connections():
     """Return live connection list from the car server."""
@@ -204,6 +218,7 @@ python client_app.py
 | POST | `/release_control` | Release control |
 | POST | `/command` | Send drive command — body: `{"dir": "F"}` |
 | POST | `/drop/<sid>` | Drop a connection by SID |
+| POST | `/speed` | Set speeds — body: `{"move_speed": 0.5, "turn_speed": 0.6}` |
 | GET | `/connections` | Current connection list |
 
 ---

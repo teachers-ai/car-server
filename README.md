@@ -11,6 +11,7 @@ A Flask-based server that runs on a Raspberry Pi car. It streams a live camera f
 - Exclusive control ownership — only one client drives at a time
 - Multi-connection dashboard — see all connected clients in real time
 - Drop any connection from the UI
+- Adjustable move and turn speed via sliders (synced across all clients in real time)
 
 ---
 
@@ -88,6 +89,7 @@ Open `http://<pi-ip>:5000` in a browser.
 | Camera feed | Live MJPEG stream from the Pi camera |
 | Control banner | Shows who currently has control; Take / Release buttons |
 | D-pad | Drive buttons — only active when you hold control |
+| Speed sliders | Move and turn speed (0.0 – 1.0); changes apply instantly and sync to all clients |
 | Connections panel | Lists all connected clients with IP, connect time, last command, and a Drop button |
 
 ### Keyboard shortcuts (when you have control)
@@ -125,12 +127,14 @@ Connect via Socket.IO to `http://<pi-ip>:5000`.
 | `release_control` | — | Release control; car stops |
 | `command` | `{"dir": "F\|B\|L\|R\|S"}` | Drive command (only works if you hold control) |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client |
+| `set_speed` | `{"move_speed": 0.0–1.0, "turn_speed": 0.0–1.0}` | Update move and/or turn speed; broadcast to all clients |
 
 **Receive:**
 
 | Event | Payload | Description |
 |---|---|---|
 | `connection_list` | `{active_controller, connections[]}` | Broadcast to all clients on any state change |
+| `speed_update` | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent to all clients when speed changes; also sent to new clients on connect |
 
 ---
 
@@ -142,7 +146,7 @@ See [CLIENT_README.md](CLIENT_README.md) for a complete guide on connecting a se
 
 ## Configuration
 
-Speed values are set in `app.py`:
+Default speed values are set in `app.py` and can be changed at runtime via the UI sliders or the `set_speed` WebSocket event:
 
 ```python
 MOVE_SPEED = 0.3   # forward / backward (0.0 – 1.0)
