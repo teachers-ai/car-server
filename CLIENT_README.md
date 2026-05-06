@@ -39,8 +39,6 @@ All car control goes over a Socket.IO WebSocket connection.
 | `command` | `{"dir": "<direction>"}` | Send a drive command. Only executes if you hold control. |
 | `drop_client` | `{"sid": "<sid>"}` | Disconnect another client by their session ID. |
 | `set_speed` | `{"move_speed": 0.0–1.0, "turn_speed": 0.0–1.0}` | Update move and/or turn speed. Broadcast to all clients immediately. |
-| `approve_control` | _(none)_ | Approve the pending control request. Only works if you hold control. |
-| `deny_control` | _(none)_ | Deny the pending control request. Only works if you hold control. |
 
 ### Direction values for `command`
 
@@ -58,9 +56,6 @@ All car control goes over a Socket.IO WebSocket connection.
 |---|---|---|
 | `connection_list` | See below | Sent to all clients whenever someone connects, disconnects, or sends a command. |
 | `speed_update` | `{"move_speed": 0.3, "turn_speed": 0.4}` | Sent to all clients when speed changes; also sent to your client on connect. |
-| `control_request` | `{"requester_sid": "...", "requester_ip": "..."}` | Sent to the current controller when someone requests control. Respond with `approve_control` or `deny_control`. |
-| `control_pending` | _(empty)_ | Sent to the requester — your request is waiting for approval. |
-| `control_response` | `{"approved": true\|false}` | Sent to the requester with the outcome of their request. |
 
 #### `connection_list` payload structure
 
@@ -103,22 +98,6 @@ def on_list(data):
     ctrl = data['active_controller']
     print(f'Controller: {ctrl}')
     print(f'Total clients: {len(data["connections"])}')
-
-@sio.on('control_request')
-def on_control_request(data):
-    print(f'{data["requester_ip"]} wants control — approving...')
-    sio.emit('approve_control')   # or sio.emit('deny_control')
-
-@sio.on('control_pending')
-def on_pending():
-    print('Waiting for controller to approve...')
-
-@sio.on('control_response')
-def on_response(data):
-    if data['approved']:
-        print('Control granted!')
-    else:
-        print('Request denied.')
 
 sio.connect(SERVER)
 
@@ -246,26 +225,11 @@ python client_app.py
 
 ## Control Flow
 
-### No one holds control
+### Taking control (only granted when no one holds it)
 ```
 Client B                    Server
     |--- take_control --------> |
     |<-- connection_list -------| (you are now controller)
-```
-
-### Someone already holds control (approval flow)
-```
-Client B                    Server                    Client A (controller)
-    |--- take_control --------> |                            |
-    |<-- control_pending -------| (waiting...)               |
-    |                           |--- control_request ------> |
-    |                           |                            | (shows approve/deny)
-    |                           |<-- approve_control --------|
-    |<-- control_response ------| {approved: true}           |
-    |<-- connection_list -------| (B is now controller)  --->|
-
-    (if denied)
-    |<-- control_response ------| {approved: false}
 ```
 
 ### Driving

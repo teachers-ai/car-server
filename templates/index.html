@@ -233,53 +233,6 @@ main {
 
 .empty-row td { color: #333; text-align: center; padding: 16px 0; font-size: 0.8rem; }
 
-/* ── Approval popup ── */
-.popup-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
-}
-.popup-overlay.show { display: flex; }
-.popup-box {
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 24px 28px;
-    max-width: 340px;
-    width: 90%;
-    text-align: center;
-}
-.popup-box h3 { font-size: 1rem; margin-bottom: 8px; }
-.popup-box p  { font-size: 0.83rem; color: #888; margin-bottom: 20px; }
-.popup-actions { display: flex; gap: 10px; justify-content: center; }
-.btn-approve { background: #14532d; color: #4ade80; border: 1px solid #166534; padding: 8px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-.btn-approve:hover { background: #166534; }
-.btn-deny    { background: #3a0a0a; color: #f87171; border: 1px solid #7f1d1d; padding: 8px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-.btn-deny:hover { background: #7f1d1d; }
-
-/* ── Toast notification ── */
-.toast {
-    display: none;
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 10px 20px;
-    font-size: 0.85rem;
-    z-index: 200;
-    white-space: nowrap;
-}
-.toast.show { display: block; }
-.toast.approved { border-color: #166534; color: #4ade80; }
-.toast.denied   { border-color: #7f1d1d; color: #f87171; }
-.toast.pending  { border-color: #1d4ed8; color: #93c5fd; }
 
 /* ── Speed sliders ── */
 .speed-section {
@@ -405,20 +358,6 @@ main {
     </div><!-- .right-pane -->
 </main>
 
-<!-- Approval popup (shown to the current controller) -->
-<div class="popup-overlay" id="approval-popup">
-    <div class="popup-box">
-        <h3>Control Request</h3>
-        <p id="approval-msg">A client wants to take control of the car.</p>
-        <div class="popup-actions">
-            <button class="btn-approve" onclick="approveControl()">Approve</button>
-            <button class="btn-deny"    onclick="denyControl()">Deny</button>
-        </div>
-    </div>
-</div>
-
-<!-- Toast -->
-<div class="toast" id="toast"></div>
 
 <script>
 const socket = io({ transports: ['websocket', 'polling'] });
@@ -480,45 +419,6 @@ function updateBanner(ctrl, conns) {
 
 function takeControl()    { socket.emit('take_control'); }
 function releaseControl() { socket.emit('release_control'); }
-function approveControl() { socket.emit('approve_control'); hidePopup(); }
-function denyControl()    { socket.emit('deny_control');    hidePopup(); }
-
-// ── Approval popup ────────────────────────────────────────────────────────────
-
-socket.on('control_request', (data) => {
-    document.getElementById('approval-msg').textContent =
-        `${data.requester_ip} is requesting control of the car.`;
-    document.getElementById('approval-popup').classList.add('show');
-});
-
-socket.on('control_pending', () => {
-    showToast('Waiting for approval…', 'pending', 0);
-});
-
-socket.on('control_response', (data) => {
-    hideToast();
-    if (data.approved) {
-        showToast('Control approved!', 'approved', 3000);
-    } else {
-        showToast('Request denied.', 'denied', 3000);
-    }
-});
-
-function hidePopup() {
-    document.getElementById('approval-popup').classList.remove('show');
-}
-
-let _toastTimer = null;
-function showToast(msg, type, duration) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = `toast show ${type}`;
-    if (_toastTimer) clearTimeout(_toastTimer);
-    if (duration > 0) _toastTimer = setTimeout(hideToast, duration);
-}
-function hideToast() {
-    document.getElementById('toast').className = 'toast';
-}
 
 // ── Speed sliders ─────────────────────────────────────────────────────────────
 

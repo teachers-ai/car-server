@@ -1,7 +1,7 @@
 import threading
 from datetime import datetime
 from flask import Flask, render_template, Response, request
-from flask_socketio import SocketIO, disconnect as _disconnect
+from flask_socketio import SocketIO
 
 try:
     from Robo import Robot
@@ -31,7 +31,6 @@ def _speed_payload():
 
 connections = {}          # {sid: {ip, connected_at, last_cmd}}
 active_controller = None  # sid of client with control, or None
-pending_request = None    # sid of client waiting for control approval
 _lock = threading.Lock()
 
 _camera_frame = None
@@ -70,7 +69,6 @@ def _gen_frames():
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _snapshot():
-    """Return serialisable connection list. Call while holding _lock."""
     return {
         'active_controller': active_controller,
         'connections': [
@@ -122,7 +120,7 @@ def on_connect():
 
 @socketio.on('disconnect')
 def on_disconnect():
-    global active_controller, pending_request
+    global active_controller
     sid = request.sid
     with _lock:
         connections.pop(sid, None)
@@ -130,73 +128,22 @@ def on_disconnect():
             active_controller = None
             if robo:
                 robo.stop()
-        if pending_request == sid:
-            pending_request = None
         data = _snapshot()
     _broadcast(data)
 
 
 @socketio.on('take_control')
 def on_take_control():
-    global active_controller, pending_request
+    global active_controller
     sid = request.sid
-    print(f'[take_control] from {sid}, active_controller={active_controller}')
     with _lock:
         if active_controller is None:
             active_controller = sid
             data = _snapshot()
-            controller_sid = None
-            print(f'[take_control] granted immediately to {sid}')
-        elif active_controller == sid:
-            data = None
-            controller_sid = None
-            print(f'[take_control] {sid} already has control')
         else:
-            pending_request = sid
-            requester_ip = connections[sid]['ip'] if sid in connections else sid
             data = None
-            controller_sid = active_controller
-            print(f'[take_control] request pending — asking controller {controller_sid}')
-
-    if controller_sid:
-        socketio.emit('control_request', {'requester_sid': sid, 'requester_ip': requester_ip}, to=controller_sid)
-        socketio.emit('control_pending', {}, to=sid)
-        print(f'[take_control] control_request sent to {controller_sid}, control_pending sent to {sid}')
-    elif data:
+    if data:
         _broadcast(data)
-
-
-@socketio.on('approve_control')
-def on_approve():
-    global active_controller, pending_request
-    sid = request.sid
-    print(f'[approve_control] from {sid}')
-    with _lock:
-        if sid != active_controller or pending_request is None:
-            print(f'[approve_control] ignored — not controller or no pending request')
-            return
-        requester = pending_request
-        active_controller = requester
-        pending_request = None
-        data = _snapshot()
-    socketio.emit('control_response', {'approved': True}, to=requester)
-    _broadcast(data)
-    print(f'[approve_control] control transferred to {requester}')
-
-
-@socketio.on('deny_control')
-def on_deny():
-    global pending_request
-    sid = request.sid
-    print(f'[deny_control] from {sid}')
-    with _lock:
-        if sid != active_controller or pending_request is None:
-            print(f'[deny_control] ignored — not controller or no pending request')
-            return
-        requester = pending_request
-        pending_request = None
-    socketio.emit('control_response', {'approved': False}, to=requester)
-    print(f'[deny_control] request from {requester} denied')
 
 
 @socketio.on('release_control')
