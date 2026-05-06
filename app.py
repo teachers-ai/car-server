@@ -137,8 +137,10 @@ def on_take_control():
     global active_controller
     sid = request.sid
     with _lock:
-        if active_controller is None:
+        if active_controller != sid:
             active_controller = sid
+            if robo:
+                robo.stop()
             data = _snapshot()
         else:
             data = None
