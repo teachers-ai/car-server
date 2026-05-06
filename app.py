@@ -171,10 +171,12 @@ _CMD_METHOD = {'F': 'forward', 'B': 'backward', 'L': 'left', 'R': 'right', 'S': 
 def on_command(data):
     sid = request.sid
     direction = data.get('dir', 'S')
+    print(f'[command] {direction} from {sid}, controller={active_controller}, robo={robo}')
     if direction not in _CMD_METHOD:
         return
     with _lock:
         if sid != active_controller:
+            print(f'[command] IGNORED — {sid} is not the controller')
             return
         if robo:
             method = getattr(robo, _CMD_METHOD[direction])
@@ -184,6 +186,9 @@ def on_command(data):
                 method(MOVE_SPEED)
             else:
                 method(TURN_SPEED)
+            print(f'[command] executed {_CMD_METHOD[direction]}')
+        else:
+            print('[command] robo is None — motor not available')
         if sid in connections:
             connections[sid]['last_cmd'] = direction
         snap = _snapshot()
